@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 )
 
@@ -25,6 +26,8 @@ func getGitPath() (string, error) {
 type Repo struct {
 	Path string
 }
+
+type Oid string
 
 // Returns stdout, error
 func runGit(repoPath string, arg ...string) (string, error) {
@@ -141,6 +144,22 @@ func Repository(path string) (*Repo, error) {
 	return &Repo{Path: strings.TrimSuffix(out, "\n")}, nil
 }
 
+func (r *Repo) RevParse(obj string) (Oid, error) {
+	out, err := runGit(r.Path, "rev-parse", obj)
+	if err != nil {
+		return "", err
+	}
+	return Oid(strings.TrimSuffix(out, "\n")), nil
+}
+
+func (r *Repo) RevParseAbbrev(obj string) (string, error) {
+	out, err := runGit(r.Path, "rev-parse", "--abbrev-ref", obj)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(out, "\n"), nil
+}
+
 func (r *Repo) Status() ([]status, error) {
 	out, err := runGit(r.Path, "status", "--porcelain", "-uno")
 	if err != nil {
@@ -153,4 +172,55 @@ func (r *Repo) Status() ([]status, error) {
 	}
 
 	return ss, nil
+}
+
+type State int
+
+const (
+	StateNone State = iota
+	StateRebaseInteractive
+	StateRebaseMerge
+	StateRebase
+	StateApplyMailbox
+	StateApplyMailboxOrRebase
+	StateMerge
+	StateRevert
+	StateCherryPick
+	StateBisect
+)
+
+func (r *Repo) hasGitFile(name string) (bool, error) {
+	_, err := os.Stat(path.Join(r.Path, ".git", name))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+var stateFiles map[string]State = map[string]State{
+	path.Join("rebase-merge", "interactive"): StateRebaseInteractive,
+	"rebase-merge":                           StateRebaseMerge,
+	path.Join("rebase-apply", "rebasing"):    StateRebase,
+	path.Join("rebase-apply", "applying"):    StateApplyMailbox,
+	"rebase-apply":                           StateApplyMailboxOrRebase,
+	"MERGE_HEAD":                             StateMerge,
+	"REVERT_HEAD":                            StateRevert,
+	"CHERRY_PICK_HEAD":                       StateCherryPick,
+	"BISECT_LOG":                             StateBisect,
+}
+
+func (r *Repo) State() (State, error) {
+	for file, state := range stateFiles {
+		b, err := r.hasGitFile(file)
+		if err != nil {
+			return 0, err
+		}
+		if b {
+			return state, nil
+		}
+	}
+	return StateNone, nil
 }
