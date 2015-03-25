@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/schani/git"
+	git "github.com/schani/gogit"
 	"os"
 )
 
