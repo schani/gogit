@@ -24,6 +24,13 @@ func test() error {
 
 	fmt.Printf("%s: %s\n", name, oid)
 
+	parents, err := r.Parents(oid)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("parents: %v\n", parents)
+
 	ss, err := r.Status()
 	if err != nil {
 		return err
